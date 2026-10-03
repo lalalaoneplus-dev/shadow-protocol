@@ -2,6 +2,12 @@
 
 A tactical 3D stealth-action cyber-operations game built on three.js and Electron. Infiltrate, hack, and neutralize across 10 fortified sectors.
 
+## Install
+
+macOS: Download the `.dmg` from https://github.com/lalalaoneplus-dev/shadow-protocol/releases/latest
+
+Windows: Download `ShadowProtocol-Setup` from https://github.com/lalalaoneplus-dev/shadow-protocol/releases/latest
+
 Each sector gates progress behind a real cyber-security objective, solved in an in-game toolset:
 
 | # | Sector | Domain |

@@ -1,0 +1,124 @@
+name: Windows release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          npx electron-builder --win nsis --publish never
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
+
+      - name: Install and launch test
+        id: installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
+          $outputDir = [string]$package.build.directories.output
+          $installers = @(Get-ChildItem -LiteralPath $outputDir -Filter '*Setup*.exe' -File)
+          if ($installers.Count -ne 1) { throw "Expected one Setup installer in $outputDir; found $($installers.Count)" }
+          $installer = $installers[0]
+          $installDir = Join-Path (Join-Path $env:LOCALAPPDATA 'Programs') ([string]$package.productName)
+          & $installer.FullName /S
+          if ($LASTEXITCODE -ne 0) { throw "Installer failed with exit code $LASTEXITCODE" }
+          $appPath = Join-Path $installDir "$($package.productName).exe"
+          if (-not (Test-Path -LiteralPath $appPath)) { throw "Installed app not found at $appPath" }
+          $app = Start-Process -FilePath $appPath -PassThru
+          Start-Sleep -Seconds 15
+          $app.Refresh()
+          if ($app.HasExited) { throw "Installed app exited during the 15-second launch test" }
+          taskkill.exe /PID $app.Id /T /F
+          if ($LASTEXITCODE -ne 0) { throw "taskkill failed with exit code $LASTEXITCODE" }
+          $uninstallers = @(Get-ChildItem -LiteralPath $installDir -Filter 'Uninstall*.exe' -File)
+          if ($uninstallers.Count -ne 1) { throw "Expected one uninstaller in $installDir; found $($uninstallers.Count)" }
+          $uninstaller = $uninstallers[0]
+          & $uninstaller.FullName /S
+          if ($LASTEXITCODE -ne 0) { throw "Uninstaller failed with exit code $LASTEXITCODE" }
+          for ($attempt = 0; $attempt -lt 30 -and (Test-Path -LiteralPath $installDir); $attempt++) {
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path -LiteralPath $installDir) { throw "Uninstaller left the install folder at $installDir" }
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShadowProtocol-Setup
+          path: ${{ steps.installer.outputs.installer }}
+          if-no-files-found: error
+
+      - name: Publish tag release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_PATH: ${{ steps.installer.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
+          $version = [string]$package.version
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -ne "v$version") { throw "Tag $tag does not match package version v$version" }
+          $expectedName = "ShadowProtocol-Setup-$version.exe"
+          if ((Split-Path -Path $env:INSTALLER_PATH -Leaf) -ne $expectedName) {
+            throw "Installer name does not match $expectedName"
+          }
+          $notes = ((Get-Content -LiteralPath README.md -Raw) -split '\r?\n\r?\n')[1].Trim()
+          if ([string]::IsNullOrWhiteSpace($notes)) { throw 'README intro is empty' }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          $viewExitCode = $LASTEXITCODE
+          if ($viewExitCode -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "Shadow Protocol $version" --notes $notes
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
+          }
+          gh release upload $tag $env:INSTALLER_PATH --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed with exit code $LASTEXITCODE" }
+
+      - name: List installer output on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputDir = 'dist-installer'
+          if (Test-Path -LiteralPath package.json) {
+            $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
+            $outputDir = [string]$package.build.directories.output
+          }
+          if (Test-Path -LiteralPath $outputDir) {
+            Write-Host "Contents of $outputDir"
+            Get-ChildItem -LiteralPath $outputDir -Recurse -Force | Format-Table FullName, Length -AutoSize
+          } else {
+            Write-Host "Output directory is absent: $outputDir"
+          }

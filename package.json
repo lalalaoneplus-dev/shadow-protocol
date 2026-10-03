@@ -1,14 +1,15 @@
 {
   "name": "shadow-protocol",
   "productName": "Shadow Protocol",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "A tactical 3D stealth-action cyber-operations game. Infiltrate, hack, and neutralize across 10 fortified sectors.",
   "author": "Prakrin Kumar",
   "license": "MIT",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "dist:mac": "bash build/dist-mac.sh"
   },
   "devDependencies": {
     "electron": "31.7.7",
@@ -29,6 +30,23 @@
     "directories": {
       "output": "dist-installer",
       "buildResources": "build"
+    },
+    "mac": {
+      "category": "public.app-category.games",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "ShadowProtocol-${version}-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.ico",
