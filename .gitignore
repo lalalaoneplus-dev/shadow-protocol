@@ -1,0 +1,13 @@
+# Dependencies (regenerable)
+node_modules/
+
+# Build / installer output
+dist/
+dist-installer/
+out/
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

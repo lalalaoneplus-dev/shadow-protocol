@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shadow Protocol</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <!-- 3D viewport -->
+  <canvas id="viewport"></canvas>
+
+  <!-- Crosshair / HUD -->
+  <div id="hud" class="hidden">
+    <div id="crosshair">+</div>
+    <div id="hud-top">
+      <div id="hud-level"></div>
+      <div id="hud-objective"></div>
+    </div>
+    <div id="hud-bottom-left">
+      <div class="meter">
+        <span class="meter-label">VISIBILITY</span>
+        <div class="meter-bar"><div id="vis-fill" class="meter-fill"></div></div>
+      </div>
+      <div class="meter">
+        <span class="meter-label">ALERT</span>
+        <div class="meter-bar"><div id="alert-fill" class="meter-fill alert"></div></div>
+      </div>
+      <div id="stance-line">STANCE: <span id="stance">STANDING</span></div>
+    </div>
+    <div id="hud-prompt" class="hidden"></div>
+    <div id="hud-toast"></div>
+    <div id="hud-frag"></div>
+  </div>
+
+  <!-- Screen overlays (menus, terminal, dialogue) are injected here -->
+  <div id="overlay"></div>
+
+  <!-- Boot / loading -->
+  <div id="boot">
+    <div class="boot-inner">
+      <div class="boot-glyph">▚▚▚</div>
+      <div class="boot-title">SHADOW PROTOCOL</div>
+      <div class="boot-sub">initialising secure runtime…</div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

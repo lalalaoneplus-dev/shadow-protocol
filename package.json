@@ -1,0 +1,54 @@
+{
+  "name": "shadow-protocol",
+  "productName": "Shadow Protocol",
+  "version": "1.0.0",
+  "description": "A tactical 3D stealth-action cyber-operations game. Infiltrate, hack, and neutralize across 10 fortified sectors.",
+  "author": "Prakrin Kumar",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.nightfall.shadowprotocol",
+    "productName": "Shadow Protocol",
+    "compression": "maximum",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/**/*",
+      "vendor/**/*",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "dist-installer",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": "x64"
+        }
+      ],
+      "artifactName": "ShadowProtocol-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Shadow Protocol",
+      "installerHeaderIcon": "build/icon.ico",
+      "uninstallDisplayName": "Shadow Protocol"
+    }
+  }
+}
