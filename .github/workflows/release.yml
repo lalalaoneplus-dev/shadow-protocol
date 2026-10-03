@@ -49,23 +49,33 @@ jobs:
           $installers = @(Get-ChildItem -LiteralPath $outputDir -Filter '*Setup*.exe' -File)
           if ($installers.Count -ne 1) { throw "Expected one Setup installer in $outputDir; found $($installers.Count)" }
           $installer = $installers[0]
-          $installDir = Join-Path (Join-Path $env:LOCALAPPDATA 'Programs') ([string]$package.productName)
-          & $installer.FullName /S
-          if ($LASTEXITCODE -ne 0) { throw "Installer failed with exit code $LASTEXITCODE" }
+          $programsDir = Join-Path $env:LOCALAPPDATA 'Programs'
+          $installDir = Join-Path $programsDir ([string]$package.productName)
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed with exit code $($install.ExitCode)" }
+          Write-Host "Contents of $programsDir (depth 2)"
+          if (Test-Path -LiteralPath $programsDir) {
+            Get-ChildItem -LiteralPath $programsDir -Recurse -Depth 2 -Force | Format-Table FullName, Length -AutoSize
+          } else {
+            Write-Host "Programs directory is absent: $programsDir"
+          }
           $appPath = Join-Path $installDir "$($package.productName).exe"
           if (-not (Test-Path -LiteralPath $appPath)) { throw "Installed app not found at $appPath" }
           $app = Start-Process -FilePath $appPath -PassThru
           Start-Sleep -Seconds 15
           $app.Refresh()
-          if ($app.HasExited) { throw "Installed app exited during the 15-second launch test" }
+          if ($app.HasExited) {
+            Write-Host "Installed app exit code: $($app.ExitCode)"
+            throw "Installed app exited during the 15-second launch test"
+          }
           taskkill.exe /PID $app.Id /T /F
           if ($LASTEXITCODE -ne 0) { throw "taskkill failed with exit code $LASTEXITCODE" }
           $uninstallers = @(Get-ChildItem -LiteralPath $installDir -Filter 'Uninstall*.exe' -File)
           if ($uninstallers.Count -ne 1) { throw "Expected one uninstaller in $installDir; found $($uninstallers.Count)" }
           $uninstaller = $uninstallers[0]
-          & $uninstaller.FullName /S
-          if ($LASTEXITCODE -ne 0) { throw "Uninstaller failed with exit code $LASTEXITCODE" }
-          for ($attempt = 0; $attempt -lt 30 -and (Test-Path -LiteralPath $installDir); $attempt++) {
+          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($uninstall.ExitCode)" }
+          for ($attempt = 0; $attempt -lt 60 -and (Test-Path -LiteralPath $installDir); $attempt++) {
             Start-Sleep -Seconds 1
           }
           if (Test-Path -LiteralPath $installDir) { throw "Uninstaller left the install folder at $installDir" }
