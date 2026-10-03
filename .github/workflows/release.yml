@@ -129,7 +129,10 @@ jobs:
           for ($attempt = 0; $attempt -lt 30 -and (Test-Path -LiteralPath $installDir); $attempt++) {
             Start-Sleep -Seconds 1
           }
-          if (Test-Path -LiteralPath $installDir) { Fail-Uninstall "Uninstaller left the install folder at $installDir" }
+          # Run with _?= the uninstaller works in place, so NSIS leaves the emptied folder itself behind.
+          if ((Test-Path -LiteralPath $installDir) -and @(Get-ChildItem -LiteralPath $installDir -Recurse -Force).Count -gt 0) {
+            Fail-Uninstall "Uninstaller left files in $installDir"
+          }
           "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Upload installer artifact
