@@ -70,15 +70,66 @@ jobs:
           }
           taskkill.exe /PID $app.Id /T /F
           if ($LASTEXITCODE -ne 0) { throw "taskkill failed with exit code $LASTEXITCODE" }
-          $uninstallers = @(Get-ChildItem -LiteralPath $installDir -Filter 'Uninstall*.exe' -File)
-          if ($uninstallers.Count -ne 1) { throw "Expected one uninstaller in $installDir; found $($uninstallers.Count)" }
-          $uninstaller = $uninstallers[0]
-          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit code $($uninstall.ExitCode)" }
-          for ($attempt = 0; $attempt -lt 60 -and (Test-Path -LiteralPath $installDir); $attempt++) {
+          $installPrefix = "$installDir\"
+          function Get-InstalledProcesses {
+            @(Get-Process | Where-Object {
+              try {
+                $processPath = $_.Path
+                $processPath -and $processPath.StartsWith($installPrefix, [StringComparison]::OrdinalIgnoreCase)
+              } catch {
+                $false
+              }
+            })
+          }
+          $uninstallExitCode = 'not started'
+          function Fail-Uninstall {
+            param([string]$Reason)
+            Write-Host "Uninstaller exit code: $uninstallExitCode"
+            Write-Host "Remaining contents of $installDir"
+            if (Test-Path -LiteralPath $installDir) {
+              Get-ChildItem -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue |
+                Select-Object FullName, Length, Attributes | Format-List | Out-String -Width 4096 | Write-Host
+            } else {
+              Write-Host '(folder absent)'
+            }
+            Write-Host "Processes running from $installDir"
+            $remainingProcesses = @(Get-InstalledProcesses)
+            if ($remainingProcesses.Count -gt 0) {
+              $remainingProcesses | Select-Object Id, ProcessName, Path |
+                Format-List | Out-String -Width 4096 | Write-Host
+            } else {
+              Write-Host '(none)'
+            }
+            throw $Reason
+          }
+          for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            if (@(Get-InstalledProcesses).Count -eq 0) { break }
             Start-Sleep -Seconds 1
           }
-          if (Test-Path -LiteralPath $installDir) { throw "Uninstaller left the install folder at $installDir" }
+          if (@(Get-InstalledProcesses).Count -ne 0) { Fail-Uninstall "Processes still running from $installDir after 20 seconds" }
+          $uninstallers = @(Get-ChildItem -LiteralPath $installDir -Filter 'Uninstall*.exe' -File)
+          if ($uninstallers.Count -ne 1) { Fail-Uninstall "Expected one uninstaller in $installDir; found $($uninstallers.Count)" }
+          $uninstaller = $uninstallers[0]
+          # NSIS removes INSTDIR; run a temp copy with _?= to keep it from spawning another uninstaller.
+          $tempUninstaller = Join-Path $env:RUNNER_TEMP ("ShadowProtocol-Uninstall-{0}.exe" -f [guid]::NewGuid())
+          try {
+            Copy-Item -LiteralPath $uninstaller.FullName -Destination $tempUninstaller
+            $uninstall = Start-Process -FilePath $tempUninstaller -ArgumentList @('/S', '/currentuser', "_?=$installDir") -Wait -PassThru
+            $uninstallExitCode = $uninstall.ExitCode
+          } catch {
+            Fail-Uninstall "Uninstaller could not run: $($_.Exception.Message)"
+          } finally {
+            Remove-Item -LiteralPath $tempUninstaller -Force -ErrorAction SilentlyContinue
+          }
+          if ($uninstallExitCode -ne 0) { Fail-Uninstall "Uninstaller failed with exit code $uninstallExitCode" }
+          for ($attempt = 0; $attempt -lt 90 -and (Test-Path -LiteralPath $appPath); $attempt++) {
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path -LiteralPath $appPath) { Fail-Uninstall "Uninstaller left the app executable at $appPath" }
+          for ($attempt = 0; $attempt -lt 30 -and (Test-Path -LiteralPath $installDir); $attempt++) {
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path -LiteralPath $installDir) { Fail-Uninstall "Uninstaller left the install folder at $installDir" }
           "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Upload installer artifact
